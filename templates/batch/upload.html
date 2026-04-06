@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Загрузка батча — AI Batch Evaluator{% endblock %}
+{% block nav_upload %}active{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <h4 class="fw-bold mb-4"><i class="bi bi-cloud-upload me-2 text-primary"></i>Загрузить батч</h4>
+
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Название задания <span class="text-muted fw-normal">(необязательно)</span></label>
+            <input type="text" name="name" class="form-control" placeholder="Например: Астана 2025 сессия 1">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Файл <span class="text-danger">*</span></label>
+            <input type="file" name="file" class="form-control" accept=".csv,.xlsx" required>
+            <div class="form-text">CSV или Excel (.xlsx). Обязательные колонки: <code>file_path</code>, <code>file_url</code>.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Webhook URL <span class="text-muted fw-normal">(необязательно)</span></label>
+            <input type="url" name="webhook_url" class="form-control" placeholder="https://...">
+            <div class="form-text">POST-запрос будет отправлен при завершении задания.</div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-send me-2"></i>Запустить оценку
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card mt-3 border-0 bg-light">
+      <div class="card-body py-3">
+        <p class="mb-2 fw-semibold text-muted small">Формат файла:</p>
+        <pre class="mb-0 small">file_path,file_url
+ПКС2025/Астана/Иванов/Группа1/план.docx,https://...
+ПКС2025/Алматы/Сейт/Группа2/файл.pdf,https://...</pre>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

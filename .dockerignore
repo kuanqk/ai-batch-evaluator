@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+.env.*
+logs
+reports
+tmp
+.pytest_cache
+.mypy_cache
+docs/*.md
+!rubrics

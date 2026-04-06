@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Задания — AI Batch Evaluator{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0 fw-bold"><i class="bi bi-speedometer2 me-2 text-primary"></i>Батч-задания</h4>
+  <a href="{% url 'batch:upload' %}" class="btn btn-primary">
+    <i class="bi bi-plus-lg me-1"></i>Загрузить батч
+  </a>
+</div>
+
+{% if jobs %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>#</th>
+          <th>Название</th>
+          <th>Статус</th>
+          <th>Прогресс</th>
+          <th>Всего / Готово / Ошибок</th>
+          <th>Создано</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in jobs %}
+        <tr>
+          <td class="text-muted small">{{ job.id }}</td>
+          <td>
+            <strong>{{ job.name }}</strong>
+            {% if job.paused %}<span class="badge bg-warning text-dark ms-1">На паузе</span>{% endif %}
+          </td>
+          <td>
+            {% if job.status == 'done' %}
+              <span class="badge bg-success">Завершён</span>
+            {% elif job.status == 'running' %}
+              <span class="badge bg-primary">В работе</span>
+            {% elif job.status == 'failed' %}
+              <span class="badge bg-danger">Ошибка</span>
+            {% else %}
+              <span class="badge bg-secondary">Ожидает</span>
+            {% endif %}
+          </td>
+          <td style="min-width:120px">
+            <div class="progress" style="height:6px">
+              <div class="progress-bar {% if job.status == 'done' %}bg-success{% elif job.status == 'failed' %}bg-danger{% endif %}"
+                   style="width:{{ job.progress_percent }}%"></div>
+            </div>
+            <small class="text-muted">{{ job.progress_percent }}%</small>
+          </td>
+          <td>
+            <span class="text-muted">{{ job.total }}</span> /
+            <span class="text-success">{{ job.processed }}</span> /
+            <span class="text-danger">{{ job.failed }}</span>
+          </td>
+          <td class="text-muted small">{{ job.created_at|date:"d.m.Y H:i" }}</td>
+          <td>
+            <a href="{% url 'batch:results' %}?job_id={{ job.id }}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-table"></i> Результаты
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-inbox display-4"></i>
+  <p class="mt-2">Нет заданий. <a href="{% url 'batch:upload' %}">Загрузите первый батч</a>.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-refresh every 15s if any job is running
+const hasRunning = {{ jobs|length }} > 0 && document.querySelector('.badge.bg-primary');
+if (hasRunning) {
+  setTimeout(() => location.reload(), 15000);
+}
+</script>
+{% endblock %}

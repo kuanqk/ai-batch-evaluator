@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Результаты — AI Batch Evaluator{% endblock %}
+{% block nav_results %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-table me-2 text-primary"></i>Результаты оценки</h4>
+  <a href="{% url 'batch:export' %}{% if filters.job_id %}?job_id={{ filters.job_id }}{% endif %}"
+     class="btn btn-outline-success btn-sm">
+    <i class="bi bi-file-earmark-excel me-1"></i>Excel
+  </a>
+</div>
+
+{# Stats strip #}
+{% if stats.count_done %}
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card text-center py-2 border-0 bg-white shadow-sm">
+      <div class="fs-4 fw-bold text-success">{{ stats.count_done }}</div>
+      <div class="text-muted small">Оценено</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center py-2 border-0 bg-white shadow-sm">
+      <div class="fs-4 fw-bold">{{ total }}</div>
+      <div class="text-muted small">Всего записей</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center py-2 border-0 bg-white shadow-sm">
+      <div class="fs-4 fw-bold text-primary">{{ stats.avg_pct|floatformat:1 }}%</div>
+      <div class="text-muted small">Средний балл</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# Filters #}
+<div class="card mb-3 shadow-sm">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      {% if filters.job_id %}<input type="hidden" name="job_id" value="{{ filters.job_id }}">{% endif %}
+      <div class="col-md-3">
+        <label class="form-label mb-1 small fw-semibold">Задание</label>
+        <select name="job_id" class="form-select form-select-sm">
+          <option value="">— Все задания —</option>
+          {% for j in jobs %}
+          <option value="{{ j.id }}" {% if filters.job_id == j.id|stringformat:"s" %}selected{% endif %}>
+            #{{ j.id }} {{ j.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1 small fw-semibold">Город</label>
+        <input type="text" name="city" class="form-control form-control-sm" value="{{ filters.city }}" placeholder="Астана">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1 small fw-semibold">Тренер</label>
+        <input type="text" name="trainer" class="form-control form-control-sm" value="{{ filters.trainer }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1 small fw-semibold">Статус</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="">Все</option>
+          <option value="done" {% if filters.status == 'done' %}selected{% endif %}>Готово</option>
+          <option value="failed" {% if filters.status == 'failed' %}selected{% endif %}>Ошибка</option>
+          <option value="processing" {% if filters.status == 'processing' %}selected{% endif %}>Обработка</option>
+          <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Ожидает</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label mb-1 small fw-semibold">Уровень</label>
+        <select name="level" class="form-select form-select-sm">
+          <option value="">Все</option>
+          {% for l in "1234" %}
+          <option value="{{ l }}" {% if filters.level == l %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-primary btn-sm w-100">
+          <i class="bi bi-search me-1"></i>Применить
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# Table #}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th>#</th>
+          <th>Город</th>
+          <th>Тренер</th>
+          <th>Группа</th>
+          <th>Педагог / Тема</th>
+          <th>Статус</th>
+          <th>Балл</th>
+          <th>%</th>
+          <th>Уровень</th>
+          <th>Дата</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in items %}
+        <tr>
+          <td class="text-muted">{{ ev.id }}</td>
+          <td>{{ ev.city|default:"—" }}</td>
+          <td>{{ ev.trainer|default:"—" }}</td>
+          <td>{{ ev.group_name|default:"—" }}</td>
+          <td>
+            {% if ev.teacher_name %}<div class="fw-semibold">{{ ev.teacher_name }}</div>{% endif %}
+            {% if ev.topic %}<div class="text-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ ev.topic }}">{{ ev.topic }}</div>{% endif %}
+            {% if not ev.teacher_name and not ev.topic %}<span class="text-muted">{{ ev.file_name|default:"—" }}</span>{% endif %}
+          </td>
+          <td>
+            {% if ev.status == 'done' %}
+              <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill"></i> Готово</span>
+            {% elif ev.status == 'failed' %}
+              <span class="text-danger"><i class="bi bi-x-circle-fill"></i> Ошибка</span>
+            {% elif ev.status == 'processing' %}
+              <span class="text-primary"><i class="bi bi-arrow-repeat"></i> Обработка</span>
+            {% else %}
+              <span class="text-muted"><i class="bi bi-hourglass"></i> Ожидает</span>
+            {% endif %}
+          </td>
+          <td>{% if ev.total_score is not None %}{{ ev.total_score|floatformat:0 }}/75{% else %}—{% endif %}</td>
+          <td>{% if ev.score_percentage is not None %}{{ ev.score_percentage|floatformat:1 }}%{% else %}—{% endif %}</td>
+          <td>
+            {% if ev.score_level %}
+            <span class="badge badge-level-{{ ev.score_level }}">Ур. {{ ev.score_level }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-muted">{{ ev.created_at|date:"d.m H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="text-center py-4 text-muted">Нет данных</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if total_pages > 1 %}
+  <div class="card-footer">
+    <nav>
+      <ul class="pagination pagination-sm mb-0 justify-content-center">
+        {% if page > 1 %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page|add:"-1" }}&job_id={{ filters.job_id }}&city={{ filters.city }}&trainer={{ filters.trainer }}&status={{ filters.status }}&level={{ filters.level }}">
+            &laquo;
+          </a>
+        </li>
+        {% endif %}
+        <li class="page-item disabled">
+          <span class="page-link">{{ page }} / {{ total_pages }} ({{ total }})</span>
+        </li>
+        {% if page < total_pages %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page|add:"1" }}&job_id={{ filters.job_id }}&city={{ filters.city }}&trainer={{ filters.trainer }}&status={{ filters.status }}&level={{ filters.level }}">
+            &raquo;
+          </a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

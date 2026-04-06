@@ -1,0 +1,91 @@
+---
+description: Orleu Batch Evaluator — правила проекта для AI-ассистента
+alwaysApply: true
+---
+
+# Orleu Batch Evaluator — Контекст проекта
+
+Система массовой автономной оценки учебных планов педагогов (репозиторий: `ai-batch-evaluator`).
+**Документация:** `docs/` (overview, architecture, database, pipeline, api, config).
+**Спринты:** `docs/sprints/README.md`, `docs/sprints/sprint-NN.md` — статус и следующие шаги.
+
+## Стек
+
+- FastAPI + Celery (Redis) + PostgreSQL (asyncpg) + NITEC LLM
+- Модель оценки: `openai/gpt-oss-120b` (быстрая reasoning, читается из `.env` без рестарта)
+- Vision OCR: `Qwen/Qwen3-VL-235B-A22B-Instruct` — **только base64**, не URL
+- Без ORM: только asyncpg + raw SQL
+
+## Обязательные паттерны
+
+### Асинхронность
+```python
+# Все pipeline функции — async
+# Семафоры для внешних сервисов (уже инициализированы в lifespan):
+async with llm_semaphore:       # NITEC LLM
+    ...
+async with download_semaphore:  # скачивание файлов
+    ...
+async with vision_semaphore:    # Vision OCR (дорого)
+    ...
+```
+
+### БД — атомарные счётчики
+```python
+# ✅ Правильно (без race condition)
+await pool.execute(
+    "UPDATE evaluation_jobs SET processed = processed + 1 WHERE id = $1", job_id
+)
+# ❌ Неправильно
+job.processed += 1; await save(job)
+```
+
+### Трекинг ошибок (fire-and-forget)
+```python
+# Ошибки трекера НЕ должны ронять pipeline
+asyncio.create_task(tracker.track_step(eval_id, step, status))
+```
+
+### Логирование с контекстом
+```python
+logger.info(f"[job={job_id}:eval={eval_id}] Step {step}: {message}")
+```
+
+### Парсинг JSON от LLM
+```python
+# Всегда использовать parse_llm_response() из pipeline/llm.py
+# Он обрабатывает: <think>...</think>, ```json...```, regex fallback
+```
+
+## Структура файлов
+
+```
+api/        — FastAPI роутеры
+pipeline/   — логика обработки (downloader, converter, extractor, llm, parser)
+tasks/      — Celery задачи (evaluate, maintenance)
+db/         — connection, models (DDL), queries (SQL)
+monitoring/ — tracker (fire-and-forget обёртки)
+rubrics/    — rubric_rus.md, rubric_kaz.md
+templates/  — Jinja2 HTML
+```
+
+## Что НЕ делать
+
+- Не использовать ApeRAG — система автономна
+- Не использовать ORM (SQLAlchemy, Django ORM)
+- Не использовать `deepseek-ai/DeepSeek-OCR` — он возвращает bbox, не текст
+- Не делать синхронные запросы к внешним API внутри async функций (subprocess через asyncio)
+- Не менять `prompt_template.py` без явной просьбы
+
+## Входные данные (CSV)
+
+```csv
+file_path,file_url
+ПКС2025/Астана/Иванов/Группа1/план.docx,https://...
+```
+
+Парсинг: `[0]/[1:город]/[2:тренер]/[3:группа]/[4:файл]` → `pipeline/parser.py`
+
+## Ключи оценок
+
+`s1_c1` … `s5_c5` (25 ключей). Максимум 75 баллов. Уровни: 1-4 (0-25%, 26-50%, 51-75%, 76-100%).

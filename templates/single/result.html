@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Результат оценки #{{ ev.id }} — AI Batch Evaluator{% endblock %}
+
+{% block content %}
+{% if not_found %}
+<div class="alert alert-warning">Оценка не найдена.</div>
+{% elif ev %}
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <h4 class="fw-bold mb-0">
+    <i class="bi bi-file-earmark-check me-2 text-primary"></i>
+    Оценка #{{ ev.id }}
+  </h4>
+  <a href="{% url 'single:submit' %}" class="btn btn-outline-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>Новая оценка
+  </a>
+</div>
+
+{# Status card #}
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card text-center py-3 border-0 shadow-sm">
+      {% if ev.status == 'done' %}
+        <div class="fs-3 text-success"><i class="bi bi-check-circle-fill"></i></div>
+        <div class="fw-semibold text-success">Готово</div>
+      {% elif ev.status == 'failed' %}
+        <div class="fs-3 text-danger"><i class="bi bi-x-circle-fill"></i></div>
+        <div class="fw-semibold text-danger">Ошибка</div>
+      {% elif ev.status == 'processing' %}
+        <div class="fs-3 text-primary"><i class="bi bi-arrow-repeat"></i></div>
+        <div class="fw-semibold text-primary">Обработка...</div>
+      {% else %}
+        <div class="fs-3 text-muted"><i class="bi bi-hourglass"></i></div>
+        <div class="text-muted">Ожидает</div>
+      {% endif %}
+    </div>
+  </div>
+  {% if ev.status == 'done' %}
+  <div class="col-md-3">
+    <div class="card text-center py-3 border-0 shadow-sm">
+      <div class="fs-3 fw-bold">{{ ev.total_score|floatformat:0 }}<span class="fs-6 text-muted">/75</span></div>
+      <div class="text-muted small">Итоговый балл</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center py-3 border-0 shadow-sm">
+      <div class="fs-3 fw-bold text-primary">{{ ev.score_percentage|floatformat:1 }}%</div>
+      <div class="text-muted small">Процент</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center py-3 border-0 shadow-sm">
+      <div class="fs-3 fw-bold">
+        <span class="badge badge-level-{{ ev.score_level }} fs-5">Ур. {{ ev.score_level }}</span>
+      </div>
+      <div class="text-muted small">Уровень</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if ev.status == 'failed' and ev.error %}
+<div class="alert alert-danger">
+  <strong>Ошибка:</strong>
+  <pre class="mb-0 mt-1 small" style="white-space:pre-wrap">{{ ev.error|truncatechars:500 }}</pre>
+</div>
+{% endif %}
+
+{% if ev.status in 'processing pending' %}
+<div class="alert alert-info">
+  Документ обрабатывается. Страница обновится автоматически через 10 секунд.
+</div>
+{% endif %}
+
+{# Meta info #}
+{% if ev.teacher_name or ev.topic %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <h6 class="card-title fw-semibold">Информация о документе</h6>
+    {% if ev.teacher_name %}<p class="mb-1"><strong>Педагог:</strong> {{ ev.teacher_name }}</p>{% endif %}
+    {% if ev.topic %}<p class="mb-0"><strong>Тема:</strong> {{ ev.topic }}</p>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# Scores table #}
+{% if scores_table %}
+<div class="card shadow-sm mb-3">
+  <div class="card-header fw-semibold">Баллы по критериям</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Раздел</th>
+          {% for c in scores_table.0.criteria %}<th class="text-center">К{{ c.key|slice:"4:" }}</th>{% endfor %}
+          <th class="text-center fw-semibold">Сумма</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in scores_table %}
+        <tr>
+          <td class="fw-semibold">Раздел {{ row.section }}</td>
+          {% for crit in row.criteria %}
+          <td class="text-center">
+            <span class="badge {% if crit.value >= 3 %}bg-success{% elif crit.value >= 2 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+              {{ crit.value }}
+            </span>
+          </td>
+          {% endfor %}
+          <td class="text-center fw-semibold">
+            {% with total=0 %}
+            {% for crit in row.criteria %}{% with total=total|add:crit.value %}{% endwith %}{% endfor %}
+            {% endwith %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# Feedback #}
+{% if ev.feedback %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <h6 class="card-title fw-semibold">Общий вывод</h6>
+    <p class="mb-0">{{ ev.feedback }}</p>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if ev and ev.status in 'processing pending' %}
+<script>setTimeout(() => location.reload(), 10000);</script>
+{% endif %}
+{% endblock %}
