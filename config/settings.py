@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "apps.accounts",
+    "apps.evaluators",
     "apps.batch",
     "apps.single",
 ]
@@ -114,6 +115,9 @@ CELERY_TASK_ROUTES = {
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 # ─── Internationalisation ─────────────────────────────────────────────────────
 LANGUAGE_CODE = "ru-ru"

@@ -29,6 +29,13 @@ class EvaluationJob(models.Model):
         blank=True,
         related_name="evaluation_jobs",
     )
+    evaluator_config = models.ForeignKey(
+        "evaluators.EvaluatorConfig",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evaluation_jobs",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -70,6 +77,13 @@ class Evaluation(models.Model):
         blank=True,
         related_name="evaluations",
     )
+    evaluator_config = models.ForeignKey(
+        "evaluators.EvaluatorConfig",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evaluations",
+    )
     material_id = models.IntegerField(null=True, blank=True, db_index=True)
     file_path = models.TextField(null=True, blank=True)
     file_url = models.TextField()
@@ -95,6 +109,9 @@ class Evaluation(models.Model):
     doc_chars = models.IntegerField(null=True, blank=True)
     prompt_tokens = models.IntegerField(default=0)
     completion_tokens = models.IntegerField(default=0)
+    used_vision_ocr = models.BooleanField(default=False)
+    used_fix_docx = models.BooleanField(default=False)
+    was_empty_doc = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)

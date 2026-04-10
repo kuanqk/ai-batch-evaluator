@@ -34,6 +34,7 @@ _INTERNAL_RESULT_KEYS = {
     "usage", "llm_raw", "text_preview", "meta", "download_filename",
     "normalized_filename", "extraction_method", "doc_lang",
     "scores", "total_score", "score_level", "rubric_preview",
+    "used_fix_docx", "used_vision_ocr", "was_empty_doc",
 }
 
 
@@ -190,6 +191,9 @@ def process_file(self, eval_id: int) -> None:  # noqa: C901
         doc_chars=result.get("doc_chars"),
         prompt_tokens=int(usage.get("prompt_tokens") or 0),
         completion_tokens=int(usage.get("completion_tokens") or 0),
+        used_vision_ocr=bool(result.get("used_vision_ocr")),
+        used_fix_docx=bool(result.get("used_fix_docx")),
+        was_empty_doc=bool(result.get("was_empty_doc")),
         current_step=8,
         processed_at=timezone.now(),
         error=None,

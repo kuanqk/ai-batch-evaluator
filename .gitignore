@@ -10,6 +10,7 @@ __pycache__/
 *.log
 logs/
 reports/
+media/
 tmp/
 .DS_Store
 .idea/
