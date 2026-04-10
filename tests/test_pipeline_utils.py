@@ -139,3 +139,43 @@ class TestLLMParsing:
         assert _level_from_points(30) == 2   # <=50%
         assert _level_from_points(50) == 3   # <=75%
         assert _level_from_points(70) == 4   # >75%
+
+    def test_unwrap_raw_response(self):
+        import json
+
+        from pipeline.llm import unwrap_raw_response
+
+        inner = {"full_report": {"sections": []}, "teacher_name": "Иван"}
+        wrapped = {"raw_response": json.dumps(inner)}
+        out = unwrap_raw_response(wrapped)
+        assert out.get("teacher_name") == "Иван"
+        assert out.get("full_report") is not None
+
+    def test_add_character_count(self):
+        from pipeline.llm import add_character_count
+
+        r = {
+            "brief_report_json": {
+                "sections": [{"recommendation": "ab"}],
+                "overall_recommendation": "cd",
+            }
+        }
+        out = add_character_count(r)
+        assert out["brief_report_json"]["character_count"] == 4
+
+
+class TestValidator:
+    def test_check_truncated_zip_bad_docx(self):
+        import io
+        import zipfile
+
+        from pipeline.validator import check_truncated_zip
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("a.txt", b"hello")
+        good = buf.getvalue()
+        truncated = good[: max(4, len(good) // 2)]
+        assert check_truncated_zip(truncated, "x.docx") is True
+        assert check_truncated_zip(good, "x.docx") is False
+        assert check_truncated_zip(good, "x.pdf") is False

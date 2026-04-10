@@ -14,6 +14,8 @@ from django.conf import settings
 from config.concurrency import llm_semaphore
 from prompt_template import get_evaluation_prompt
 
+from pipeline.validator import build_empty_result
+
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = "Отвечай ТОЛЬКО валидным JSON без markdown."
@@ -54,6 +56,44 @@ def parse_llm_response(raw: str | None) -> Optional[dict[str, Any]]:
             pass
 
     return None
+
+
+def unwrap_raw_response(result: dict[str, Any]) -> dict[str, Any]:
+    """
+    If the model returned {"raw_response": "..."} without full_report, try to parse inner JSON.
+    """
+    if "raw_response" not in result or "full_report" in result:
+        return result
+    try:
+        raw = result["raw_response"]
+        if not isinstance(raw, str):
+            return result
+        raw = re.sub(r"^```json\s*", "", raw.strip())
+        raw = re.sub(r"\s*```\s*$", "", raw).strip()
+        inner = json.loads(raw)
+        if isinstance(inner, dict):
+            return inner
+    except Exception:
+        pass
+    return result
+
+
+def add_character_count(result: dict[str, Any]) -> dict[str, Any]:
+    """Total character count in brief_report_json (Beles-style payloads)."""
+    br = result.get("brief_report_json")
+    if not isinstance(br, dict):
+        return result
+    total = 0
+    for s in br.get("sections") or []:
+        if isinstance(s, dict):
+            rec = s.get("recommendation", "")
+            if isinstance(rec, str):
+                total += len(rec)
+    overall = br.get("overall_recommendation", "")
+    if isinstance(overall, str):
+        total += len(overall)
+    br["character_count"] = total
+    return result
 
 
 def _level_from_points(total: int, max_points: int = 75) -> int:
@@ -104,39 +144,6 @@ def extract_scores(result: dict[str, Any]) -> tuple[dict[str, int], float, int]:
             pass
 
     return scores, total, level
-
-
-def build_empty_result(reason: str) -> dict[str, Any]:
-    return {
-        "validation": {
-            "is_valid": False,
-            "is_substantive": False,
-            "is_on_topic": False,
-            "failure_reason": reason,
-        },
-        "teacher_name": "Не указано",
-        "topic": "Не указано",
-        "full_report": {
-            "overall_score": {
-                "total_points": 0,
-                "max_points": 75,
-                "percentage": 0.0,
-                "level": 1,
-            },
-            "sections": [],
-            "top_strengths": [],
-            "critical_gaps": [],
-        },
-        "brief_report_json": {
-            "sections": [],
-            "overall_recommendation": reason,
-        },
-        "level_assessment": {
-            "level": 1,
-            "description": "Документ не подлежит полноценной оценке",
-            "justification": reason,
-        },
-    }
 
 
 async def evaluate_with_llm(rubric: str, student_work: str) -> tuple[str, dict[str, int]]:

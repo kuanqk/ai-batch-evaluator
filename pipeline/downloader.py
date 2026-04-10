@@ -16,11 +16,26 @@ logger = logging.getLogger(__name__)
 DOWNLOAD_TIMEOUT = 60.0
 
 
-def _normalize_url(url: str) -> str:
+def convert_google_docs_url(url: str) -> str:
+    """
+    Convert a Google Docs sharing URL to an export URL (PDF).
+    Non–Google Docs URLs are returned unchanged.
+    """
     u = url.strip()
     parsed = urlparse(u)
     host = (parsed.netloc or "").lower()
     path = parsed.path or ""
+    m = re.search(r"/document/d/([a-zA-Z0-9_-]+)", path)
+    if m and ("docs.google.com" in host):
+        doc_id = m.group(1)
+        return f"https://docs.google.com/document/d/{doc_id}/export?format=pdf"
+    return u
+
+
+def _normalize_url(url: str) -> str:
+    u = url.strip()
+    parsed = urlparse(u)
+    host = (parsed.netloc or "").lower()
 
     if "1drv.ms" in host or "onedrive.live.com" in host or "sharepoint.com" in host:
         q = parse_qs(parsed.query)
@@ -38,11 +53,9 @@ def _normalize_url(url: str) -> str:
                 )
             )
 
-    m = re.search(r"/document/d/([a-zA-Z0-9_-]+)", path)
-    if m and ("docs.google.com" in host):
-        doc_id = m.group(1)
-        export_url = f"https://docs.google.com/document/d/{doc_id}/export?format=pdf"
-        return export_url
+    goog = convert_google_docs_url(u)
+    if goog != u:
+        return goog
 
     return u
 

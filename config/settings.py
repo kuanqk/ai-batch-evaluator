@@ -130,6 +130,11 @@ NITEC_MODEL = os.environ.get("NITEC_MODEL", "openai/gpt-oss-120b")
 NITEC_VISION_MODEL = os.environ.get("NITEC_VISION_MODEL", "Qwen/Qwen3-VL-235B-A22B-Instruct")
 NITEC_MAX_TOKENS = int(os.environ.get("NITEC_MAX_TOKENS", "4096"))
 
+# ─── Extraction / Vision ─────────────────────────────────────────────────────
+MIN_TEXT_CHARS = int(os.environ.get("MIN_TEXT_CHARS", "50"))
+VISION_MAX_PAGES = int(os.environ.get("VISION_MAX_PAGES", "10"))
+VISION_DPI = int(os.environ.get("VISION_DPI", "150"))
+
 # ─── Concurrency ──────────────────────────────────────────────────────────────
 NITEC_MAX_WORKERS = int(os.environ.get("NITEC_MAX_WORKERS", "5"))
 MAX_CONCURRENT_DOWNLOADS = int(os.environ.get("MAX_CONCURRENT_DOWNLOADS", "20"))
