@@ -2,9 +2,13 @@
 
 from django.urls import path
 
-from . import api
+from . import api, evaluator_api
 
 urlpatterns = [
+    path("ev/<slug:slug>/evaluate/", evaluator_api.ConfigEvaluateView.as_view(), name="api-ev-evaluate"),
+    path("ev/<slug:slug>/batch/", evaluator_api.ConfigBatchUploadView.as_view(), name="api-ev-batch"),
+    path("ev/<slug:slug>/health/", evaluator_api.ConfigHealthView.as_view(), name="api-ev-health"),
+    path("ev/<slug:slug>/stats/", evaluator_api.ConfigStatsView.as_view(), name="api-ev-stats"),
     path("health/", api.health, name="api-health"),
     path("batch/upload/", api.upload_batch, name="api-batch-upload"),
     path("batch/<int:job_id>/", api.get_job, name="api-batch-detail"),

@@ -16,25 +16,9 @@ from config.concurrency import vision_semaphore
 
 from pipeline.converter import convert_docx_to_pdf
 from pipeline.docx_utils import extract_text_from_docx_xml
+from pipeline.options import PipelineOptions, build_pipeline_options
 
 logger = logging.getLogger(__name__)
-
-
-def _min_chars_docx() -> int:
-    return int(getattr(settings, "MIN_TEXT_CHARS", 50))
-
-
-def _min_chars_pdf() -> int:
-    # Slightly higher bar for born-digital PDF text layer
-    return max(_min_chars_docx(), 100)
-
-
-def _vision_max_pages() -> int:
-    return int(getattr(settings, "VISION_MAX_PAGES", 10))
-
-
-def _vision_dpi() -> int:
-    return int(getattr(settings, "VISION_DPI", 150))
 
 
 def _table_to_markdown(table) -> str:
@@ -97,10 +81,13 @@ async def extract_text_via_vision_qwen(
     *,
     max_pages: int | None = None,
     dpi: int | None = None,
+    vision_model: str | None = None,
 ) -> str:
     """PDF → PNG per page (base64) → NITEC vision model → concatenated text."""
-    max_pages = max_pages if max_pages is not None else _vision_max_pages()
-    dpi = dpi if dpi is not None else _vision_dpi()
+    opts = build_pipeline_options(None)
+    max_pages = max_pages if max_pages is not None else opts.vision_max_pages
+    dpi = dpi if dpi is not None else opts.vision_dpi
+    model = vision_model or settings.NITEC_VISION_MODEL
 
     sem = vision_semaphore
     if sem is None:
@@ -153,7 +140,7 @@ async def extract_text_via_vision_qwen(
 
     async with sem:
         response = await client.chat.completions.create(
-            model=settings.NITEC_VISION_MODEL,
+            model=model,
             temperature=0.0,
             max_tokens=8192,
             messages=[{"role": "user", "content": content}],
@@ -163,13 +150,19 @@ async def extract_text_via_vision_qwen(
     return (raw or "").strip()
 
 
-async def extract_text(content: bytes, filename: str) -> tuple[str, str]:
+async def extract_text(
+    content: bytes,
+    filename: str,
+    options: PipelineOptions | None = None,
+) -> tuple[str, str]:
     """
     Returns (text, method) where method is one of:
     plain | python_docx | xml | pdf_text | vision_ocr | empty
     """
-    min_d = _min_chars_docx()
-    min_pdf = _min_chars_pdf()
+    opts = options or build_pipeline_options(None)
+    min_d = opts.min_text_chars
+    min_pdf = opts.min_pdf_chars()
+    vm = opts.vision_model_effective()
 
     ext = Path(filename).suffix.lower()
 
@@ -185,34 +178,49 @@ async def extract_text(content: bytes, filename: str) -> tuple[str, str]:
         text = extract_text_from_pdf(content)
         if len(text) >= min_pdf:
             return text, "pdf_text"
-        if len(text) < min_pdf:
-            ocr = await extract_text_via_vision_qwen(content)
+        if len(text) < min_pdf and vm:
+            ocr = await extract_text_via_vision_qwen(
+                content,
+                max_pages=opts.vision_max_pages,
+                dpi=opts.vision_dpi,
+                vision_model=vm,
+            )
             if len(ocr.strip()) >= min_pdf:
                 return ocr.strip(), "vision_ocr"
         return text, "pdf_text" if text else "empty"
 
     if ext == ".docx":
-        text = extract_text_with_python_docx(content)
-        if len(text) >= min_d:
-            return text, "python_docx"
+        text = ""
+        if opts.enable_python_docx:
+            text = extract_text_with_python_docx(content)
+            if len(text) >= min_d:
+                return text, "python_docx"
         text = extract_text_from_docx_xml(content)
         if len(text) >= min_d:
             return text, "xml"
+        if not opts.enable_pymupdf_fallback:
+            return text, "xml" if text else "empty"
         pdf_bytes = await convert_docx_to_pdf(content)
         if pdf_bytes:
             text = extract_text_from_pdf(pdf_bytes)
             if len(text) >= min_d:
                 return text, "pdf_text"
-            if len(text) < min_d:
-                ocr = await extract_text_via_vision_qwen(pdf_bytes)
+            if len(text) < min_d and vm:
+                ocr = await extract_text_via_vision_qwen(
+                    pdf_bytes,
+                    max_pages=opts.vision_max_pages,
+                    dpi=opts.vision_dpi,
+                    vision_model=vm,
+                )
                 if len(ocr.strip()) >= min_d:
                     return ocr.strip(), "vision_ocr"
         return text, "xml" if text else "empty"
 
-    # Fallback: try python-docx then XML (e.g. odd extension but docx payload)
-    text = extract_text_with_python_docx(content)
-    if text and len(text) >= min_d:
-        return text, "python_docx"
+    text = ""
+    if opts.enable_python_docx:
+        text = extract_text_with_python_docx(content)
+        if text and len(text) >= min_d:
+            return text, "python_docx"
     text = extract_text_from_docx_xml(content)
     if text and len(text) >= min_d:
         return text, "xml"

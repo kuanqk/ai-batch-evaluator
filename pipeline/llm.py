@@ -146,7 +146,15 @@ def extract_scores(result: dict[str, Any]) -> tuple[dict[str, int], float, int]:
     return scores, total, level
 
 
-async def evaluate_with_llm(rubric: str, student_work: str) -> tuple[str, dict[str, int]]:
+async def evaluate_with_llm(
+    rubric: str,
+    student_work: str,
+    *,
+    model: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    user_content: str | None = None,
+) -> tuple[str, dict[str, int]]:
     """Returns (raw_response, usage dict with token counts)."""
     if not settings.NITEC_API_KEY:
         raise ValueError("NITEC_API_KEY is not set")
@@ -159,13 +167,18 @@ async def evaluate_with_llm(rubric: str, student_work: str) -> tuple[str, dict[s
         base_url=settings.NITEC_BASE_URL.rstrip("/"),
         api_key=settings.NITEC_API_KEY,
     )
-    user_content = get_evaluation_prompt(rubric, student_work)
+    if user_content is None:
+        user_content = get_evaluation_prompt(rubric, student_work)
+
+    use_model = model or settings.NITEC_MODEL
+    use_temp = 0.1 if temperature is None else float(temperature)
+    use_max = int(max_tokens if max_tokens is not None else settings.NITEC_MAX_TOKENS)
 
     async with sem:
         response = await client.chat.completions.create(
-            model=settings.NITEC_MODEL,
-            temperature=0.1,
-            max_tokens=settings.NITEC_MAX_TOKENS,
+            model=use_model,
+            temperature=use_temp,
+            max_tokens=use_max,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_content},

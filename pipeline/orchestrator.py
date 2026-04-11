@@ -7,8 +7,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from django.conf import settings
-
 from pipeline.converter import convert_to_docx
 from pipeline.downloader import download_file
 from pipeline.extractor import extract_text
@@ -19,8 +17,9 @@ from pipeline.llm import (
     parse_llm_response,
     unwrap_raw_response,
 )
+from pipeline.options import build_pipeline_options
 from pipeline.parser import parse_file_path
-from pipeline.rubric_loader import get_rubric
+from pipeline.rubric_loader import resolve_rubric_for_pipeline
 from pipeline.validator import (
     build_empty_result,
     check_truncated_zip,
@@ -33,21 +32,21 @@ logger = logging.getLogger(__name__)
 SUPPORTED_EXT = {".doc", ".docx", ".pdf", ".odt", ".rtf", ".txt"}
 
 
-def _min_text_chars() -> int:
-    return int(getattr(settings, "MIN_TEXT_CHARS", 50))
-
-
 async def run_pipeline(
     url: str,
     file_path: str | None = None,
     *,
     extract_only: bool = False,
+    eval_config: Any | None = None,
 ) -> dict[str, Any]:
     """
     Download URL, extract text, optionally run LLM evaluation.
     If file_path is None, uses a placeholder path for parser metadata.
     When extract_only is True, skips LLM (returns extraction + rubric only).
+    eval_config: optional EvaluatorConfig instance (DB-loaded in the caller).
     """
+    opts = build_pipeline_options(eval_config)
+
     meta: dict[str, Any] = {}
     if file_path:
         parsed = parse_file_path(file_path)
@@ -67,7 +66,7 @@ async def run_pipeline(
             "file_name": "",
         }
 
-    content, dl_name = await download_file(url)
+    content, dl_name = await download_file(url, enable_google_docs=opts.enable_google_docs)
     file_size_bytes = len(content)
     filename = meta.get("file_name") or dl_name
     if not Path(filename).suffix and Path(dl_name).suffix:
@@ -99,7 +98,7 @@ async def run_pipeline(
         return result
 
     used_fix_docx = False
-    if ext == ".docx":
+    if ext == ".docx" and opts.enable_doc_fix:
         with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tf:
             tf.write(content)
             tmp_path = tf.name
@@ -110,9 +109,9 @@ async def run_pipeline(
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
-    text, method = await extract_text(content, filename)
+    text, method = await extract_text(content, filename, opts)
     doc_chars = len(text)
-    min_chars = _min_text_chars()
+    min_chars = opts.min_text_chars
     if not is_text_sufficient(text, min_chars):
         result = build_empty_result("Документ пуст или не содержит текста")
         result["meta"] = meta
@@ -125,7 +124,7 @@ async def run_pipeline(
         result["was_empty_doc"] = True
         return result
 
-    rubric, lang = get_rubric(text)
+    rubric, lang = resolve_rubric_for_pipeline(text, eval_config)
 
     out: dict[str, Any] = {
         "meta": meta,
@@ -145,7 +144,18 @@ async def run_pipeline(
         out["rubric_preview"] = rubric[:1500]
         return out
 
-    raw, usage = await evaluate_with_llm(rubric, text)
+    user_content = None
+    if eval_config is not None and getattr(eval_config, "prompt_template_id", None):
+        user_content = eval_config.prompt_template.render(rubric, text)
+
+    raw, usage = await evaluate_with_llm(
+        rubric,
+        text,
+        model=opts.llm_model,
+        temperature=opts.temperature,
+        max_tokens=opts.max_tokens,
+        user_content=user_content,
+    )
     parsed = parse_llm_response(raw)
     if not parsed:
         logger.error("LLM response could not be parsed as JSON")

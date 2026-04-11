@@ -32,7 +32,7 @@ def convert_google_docs_url(url: str) -> str:
     return u
 
 
-def _normalize_url(url: str) -> str:
+def _normalize_url(url: str, *, enable_google_docs: bool = True) -> str:
     u = url.strip()
     parsed = urlparse(u)
     host = (parsed.netloc or "").lower()
@@ -53,9 +53,10 @@ def _normalize_url(url: str) -> str:
                 )
             )
 
-    goog = convert_google_docs_url(u)
-    if goog != u:
-        return goog
+    if enable_google_docs:
+        goog = convert_google_docs_url(u)
+        if goog != u:
+            return goog
 
     return u
 
@@ -76,9 +77,9 @@ def _filename_from_url(url: str) -> str:
     return "document.pdf"
 
 
-async def download_file(url: str) -> tuple[bytes, str]:
+async def download_file(url: str, *, enable_google_docs: bool = True) -> tuple[bytes, str]:
     """Returns (content_bytes, filename)."""
-    final_url = _normalize_url(url)
+    final_url = _normalize_url(url, enable_google_docs=enable_google_docs)
     sem = download_semaphore
     if sem is None:
         raise RuntimeError("download_semaphore not initialized; call init_concurrency() first")

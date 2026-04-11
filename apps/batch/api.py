@@ -63,6 +63,7 @@ def upload_batch(request: Request) -> Response:
     evals = [
         Evaluation(
             job=job,
+            evaluator_config_id=job.evaluator_config_id,
             file_path=r.get("file_path"),
             file_url=r["file_url"],
             city=r.get("city"),

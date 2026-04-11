@@ -112,7 +112,12 @@ def _notify_webhook_sync(job_id: int) -> None:
 def process_file(self, eval_id: int) -> None:  # noqa: C901
     # 1. Read evaluation
     try:
-        ev = Evaluation.objects.select_related("job").get(pk=eval_id)
+        ev = Evaluation.objects.select_related(
+            "job",
+            "evaluator_config",
+            "evaluator_config__rubric",
+            "evaluator_config__prompt_template",
+        ).get(pk=eval_id)
     except Evaluation.DoesNotExist:
         logger.warning("[eval=%s] not found, skipping", eval_id)
         return
@@ -142,7 +147,9 @@ def process_file(self, eval_id: int) -> None:  # noqa: C901
     try:
         from config.concurrency import init_concurrency
         init_concurrency()
-        result = asyncio.run(run_pipeline(file_url, file_path, extract_only=False))
+        result = asyncio.run(
+            run_pipeline(file_url, file_path, extract_only=False, eval_config=ev.evaluator_config)
+        )
     except Exception as e:
         err = f"{e}\n{traceback.format_exc()}"
         logger.error("[eval=%s] pipeline error: %s", eval_id, err[:500])
