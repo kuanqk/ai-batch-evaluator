@@ -211,6 +211,14 @@ def process_file(self, eval_id: int) -> None:  # noqa: C901
         eval_id, score_level, pct,
     )
 
+    if ev.evaluator_config_id:
+        try:
+            from tasks.delivery import deliver_evaluation_outcome
+
+            deliver_evaluation_outcome(eval_id)
+        except Exception:
+            logger.exception("[eval=%s] delivery hook failed (non-fatal)", eval_id)
+
     if ev.job_id:
         EvaluationJob.objects.filter(pk=ev.job_id).update(processed=F("processed") + 1)
         if _try_finalize_job(ev.job_id):

@@ -1,0 +1,19 @@
+[Unit]
+Description=Orleu Batch Evaluator Celery worker
+After=network.target
+
+[Service]
+Type=simple
+User=ai
+Group=ai
+WorkingDirectory=/opt/orleu-batch-evaluator
+EnvironmentFile=/opt/orleu-batch-evaluator/.env
+ExecStart=/opt/orleu-batch-evaluator/venv/bin/celery -A config worker \
+    --concurrency=5 \
+    -Q evaluation,maintenance \
+    -l info
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
