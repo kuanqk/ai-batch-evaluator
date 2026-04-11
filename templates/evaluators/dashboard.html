@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Дашборд: {{ config.name }}{% endblock %}
+{% block nav_evaluators %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <h4 class="mb-1 fw-bold"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>{{ config.name }}</h4>
+    <p class="text-muted small mb-0">
+      <code>/api/ev/{{ config.slug }}/evaluate/</code>
+      {% if config.is_active %}<span class="badge bg-success ms-1">Активен</span>{% else %}<span class="badge bg-secondary ms-1">Выкл</span>{% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'evaluators:edit' config.pk %}" class="btn btn-outline-primary btn-sm">Изменить конфиг</a>
+    <a href="{% url 'evaluators:list' %}" class="btn btn-outline-secondary btn-sm">К списку</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm h-100"><div class="card-body py-3 text-center">
+      <div class="text-muted small">Всего</div>
+      <div class="fs-4 fw-bold">{{ total }}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm h-100 border-success"><div class="card-body py-3 text-center">
+      <div class="text-muted small">Успешно</div>
+      <div class="fs-4 fw-bold text-success">{{ done }}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm h-100 border-danger"><div class="card-body py-3 text-center">
+      <div class="text-muted small">Ошибки</div>
+      <div class="fs-4 fw-bold text-danger">{{ failed }}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm h-100"><div class="card-body py-3 text-center">
+      <div class="text-muted small">В работе</div>
+      <div class="fs-4 fw-bold text-primary">{{ processing }}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm h-100"><div class="card-body py-3 text-center">
+      <div class="text-muted small">Ожидают</div>
+      <div class="fs-4 fw-bold text-secondary">{{ pending }}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="card shadow-sm h-100"><div class="card-body py-3 text-center">
+      <div class="text-muted small">Среднее время</div>
+      <div class="fs-4 fw-bold">{% if avg_seconds is not None %}{{ avg_seconds }} с{% else %}—{% endif %}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header">Токены (средние по оценкам)</div>
+      <div class="card-body">
+        <p class="mb-1"><span class="text-muted">Prompt:</span> {{ avg_prompt_tokens|default:0 }}</p>
+        <p class="mb-0"><span class="text-muted">Completion:</span> {{ avg_completion_tokens|default:0 }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header">Диагностика pipeline</div>
+      <div class="card-body small">
+        <p class="mb-1">Vision OCR: <strong>{{ vision_count }}</strong> из {{ total }}</p>
+        <p class="mb-1">fix_broken_docx: <strong>{{ fix_docx_count }}</strong></p>
+        <p class="mb-0">Пустые документы: <strong>{{ empty_doc_count }}</strong></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if done and level_bars %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header">Распределение уровней (успешные оценки)</div>
+  <div class="card-body">
+    {% for row in level_bars %}
+    <div class="mb-2">
+      <div class="d-flex justify-content-between small mb-1">
+        <span>Уровень {{ row.level }}</span>
+        <span>{{ row.count }} ({{ row.pct }}%)</span>
+      </div>
+      <div class="progress" style="height:8px">
+        <div class="progress-bar {% if row.level == 1 %}bg-danger{% elif row.level == 2 %}bg-warning{% elif row.level == 3 %}bg-warning text-dark{% else %}bg-success{% endif %}" style="width: {{ row.pct }}%"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-header">Последние оценки (до 30)</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>#</th>
+          <th>Статус</th>
+          <th>Файл</th>
+          <th>Уровень</th>
+          <th>Ошибка</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in recent %}
+        <tr>
+          <td class="text-muted">{{ e.id }}</td>
+          <td><span class="small">{{ e.get_status_display }}</span></td>
+          <td class="small">{{ e.file_name|default:e.file_url|truncatechars:40 }}</td>
+          <td>{% if e.score_level %}<span class="badge badge-level-{{ e.score_level }}">{{ e.score_level }}</span>{% else %}—{% endif %}</td>
+          <td class="small text-danger">{% if e.error %}{{ e.error|truncatechars:48 }}{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted text-center py-3">Нет оценок с этим конфигом</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Новая рубрика{% endblock %}
+{% block nav_evaluators %}active{% endblock %}
+
+{% block content %}
+<h4 class="mb-4 fw-bold">Загрузка рубрики</h4>
+<form method="post" enctype="multipart/form-data" class="card shadow-sm">
+  <div class="card-body">
+    {% csrf_token %}
+    {% for field in form %}
+      {% include "evaluators/_field.html" with field=field %}
+    {% endfor %}
+  </div>
+  <div class="card-footer">
+    <button type="submit" class="btn btn-primary">Сохранить</button>
+    <a href="{% url 'evaluators:rubric-list' %}" class="btn btn-outline-secondary">Назад</a>
+  </div>
+</form>
+{% endblock %}

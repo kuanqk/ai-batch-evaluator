@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{% if object %}Изменить{% else %}Новый{% endif %} конфиг — AI Batch Evaluator{% endblock %}
+{% block nav_evaluators %}active{% endblock %}
+
+{% block content %}
+<h4 class="mb-4 fw-bold">
+  <i class="bi bi-sliders2 me-2 text-primary"></i>
+  {% if object %}Редактирование: {{ object.name }}{% else %}Новая конфигурация{% endif %}
+</h4>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <ul class="nav nav-tabs mb-3 flex-wrap" role="tablist">
+    <li class="nav-item" role="presentation"><button class="nav-link active" id="tab-main-btn" data-bs-toggle="tab" data-bs-target="#tab-main" type="button" role="tab">Основное</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-llm" type="button" role="tab">LLM</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-rubric" type="button" role="tab">Рубрика</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-pipe" type="button" role="tab">Pipeline</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-del" type="button" role="tab">Интеграция</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-prompt" type="button" role="tab">Промпт</button></li>
+  </ul>
+
+  <div class="tab-content card card-body shadow-sm mb-3">
+    <div class="tab-pane fade show active" id="tab-main">
+      {% include "evaluators/_field.html" with field=form.name %}
+      {% include "evaluators/_field.html" with field=form.slug %}
+      {% include "evaluators/_field.html" with field=form.description %}
+      {% include "evaluators/_field.html" with field=form.is_active %}
+    </div>
+    <div class="tab-pane fade" id="tab-llm">
+      {% include "evaluators/_field.html" with field=form.llm_model %}
+      {% include "evaluators/_field.html" with field=form.vision_model %}
+      {% include "evaluators/_field.html" with field=form.whisper_model %}
+      {% include "evaluators/_field.html" with field=form.temperature %}
+      {% include "evaluators/_field.html" with field=form.max_tokens %}
+      {% include "evaluators/_field.html" with field=form.evaluation_slots %}
+    </div>
+    <div class="tab-pane fade" id="tab-rubric">
+      {% include "evaluators/_field.html" with field=form.rubric %}
+      {% include "evaluators/_field.html" with field=form.language_mode %}
+    </div>
+    <div class="tab-pane fade" id="tab-pipe">
+      {% include "evaluators/_field.html" with field=form.enable_doc_fix %}
+      {% include "evaluators/_field.html" with field=form.enable_google_docs %}
+      {% include "evaluators/_field.html" with field=form.enable_python_docx %}
+      {% include "evaluators/_field.html" with field=form.enable_pymupdf_fallback %}
+      {% include "evaluators/_field.html" with field=form.enable_vision_ocr %}
+      {% include "evaluators/_field.html" with field=form.enable_audio %}
+      {% include "evaluators/_field.html" with field=form.enable_validation %}
+      <hr>
+      {% include "evaluators/_field.html" with field=form.min_text_chars %}
+      {% include "evaluators/_field.html" with field=form.vision_max_pages %}
+      {% include "evaluators/_field.html" with field=form.vision_dpi %}
+    </div>
+    <div class="tab-pane fade" id="tab-del">
+      {% include "evaluators/_field.html" with field=form.delivery_type %}
+      {% include "evaluators/_field.html" with field=form.beles_base_url %}
+      {% include "evaluators/_field.html" with field=form.beles_api_key %}
+      {% include "evaluators/_field.html" with field=form.beles_endpoint_tpl %}
+      {% include "evaluators/_field.html" with field=form.beles_http_method %}
+      {% include "evaluators/_field.html" with field=form.webhook_url %}
+      <hr>
+      {% include "evaluators/_field.html" with field=form.enable_retry %}
+      {% include "evaluators/_field.html" with field=form.retry_attempts %}
+      <hr>
+      {% include "evaluators/_field.html" with field=form.api_key %}
+    </div>
+    <div class="tab-pane fade" id="tab-prompt">
+      {% include "evaluators/_field.html" with field=form.prompt_template %}
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Сохранить</button>
+  <a href="{% url 'evaluators:list' %}" class="btn btn-outline-secondary">К списку</a>
+  {% if object %}
+  <a href="{% url 'evaluators:delete' object.pk %}" class="btn btn-outline-danger float-end">Удалить</a>
+  {% endif %}
+</form>
+{% endblock %}

@@ -78,6 +78,11 @@
           </a>
         </li>
         {% if user.is_staff %}
+        <li class="nav-item">
+          <a class="nav-link {% block nav_evaluators %}{% endblock %}" href="{% url 'evaluators:list' %}">
+            <i class="bi bi-sliders2"></i> Конфиги оценщиков
+          </a>
+        </li>
         <li class="nav-item mt-3">
           <a class="nav-link" href="{% url 'admin:index' %}">
             <i class="bi bi-gear"></i> Администрирование

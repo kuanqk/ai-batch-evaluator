@@ -49,6 +49,7 @@ services:
       - ./reports:/app/reports
       - ./logs:/app/logs
       - ./rubrics:/app/rubrics
+      - ./media:/app/media
       - staticfiles:/app/staticfiles
 
   celery:
@@ -73,6 +74,7 @@ services:
     volumes:
       - ./reports:/app/reports
       - ./rubrics:/app/rubrics
+      - ./media:/app/media
 
 volumes:
   postgres_data:
