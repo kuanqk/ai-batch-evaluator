@@ -8,7 +8,7 @@
 
 ## Задачи
 
-- [x] `prompt_template.py` — промпт оценки (см. `docs/pipeline.md`, старый `orleu-evaluator-main` при наличии)
+- [x] `prompt_template.py` — промпт оценки (см. `docs/reference/pipeline.md`, старый `orleu-evaluator-main` при наличии)
 - [x] `pipeline/parser.py` — парсинг `file_path` → city, trainer, group_name, file_name
 - [x] `pipeline/downloader.py` — OneDrive / Google Docs / прямой URL → `(bytes, filename)`
 - [x] `pipeline/converter.py` — doc→docx (LibreOffice async), docx→pdf

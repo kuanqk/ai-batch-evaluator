@@ -40,24 +40,21 @@ python -m pytest tests/ -v
 ## Структура
 
 ```
-apps/accounts/   — авторизация (CustomUser)
-apps/batch/      — основной модуль (EvaluationJob, Evaluation, UI, DRF API)
-apps/single/     — оценка одного документа
-pipeline/        — async логика (скачивание, конвертация, LLM)
-tasks/           — Celery tasks
-templates/       — Bootstrap 5 UI
-docs/            — документация и спринты
+apps/accounts/    — авторизация (CustomUser)
+apps/batch/       — EvaluationJob, Evaluation, UI батча, DRF /api/
+apps/evaluators/  — EvaluatorConfig, рубрики, промпты, staff UI
+apps/single/      — оценка одного документа (браузер)
+pipeline/         — async: скачивание, конвертация, извлечение текста, LLM
+tasks/            — Celery (evaluate, maintenance, delivery)
+templates/        — Bootstrap 5
+docs/             — см. docs/README.md (индекс)
 ```
 
-## API (DRF, TokenAuthentication)
+## API
 
-```
-POST /api/batch/upload/         — загрузить CSV/Excel
-GET  /api/batch/<id>/           — прогресс задания
-POST /api/evaluate/             — один документ (для Beles)
-GET  /api/evaluations/          — список оценок
-GET  /api/stats/                — статистика
-GET  /api/health/               — статус сервиса
-```
+Глобальные JSON-эндпоинты: префикс **`/api/`** (батч, оценки, stats, health).  
+Аутентификация: **Token** или сессия; при заданном **`EVALUATOR_API_KEY`** — также заголовок **`X-API-Key`**.
 
-Подробнее: `docs/sprints/README.md`
+Per-config (мультиконфиг): **`/api/ev/<slug>/evaluate/`**, **`batch`**, **`health`**, **`stats`** — ключ из **`EvaluatorConfig.api_key`**.
+
+Документация: **`docs/README.md`** (индекс), **`docs/reference/api.md`**, **`docs/getting-started/overview.md`**, **`docs/sprints/README.md`**.

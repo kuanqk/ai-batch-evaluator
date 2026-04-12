@@ -3,6 +3,9 @@
 > Система массовой оценки учебных материалов педагогов на базе Django + Celery + NITEC LLM.  
 > Сервер: `/opt/orleu-batch-evaluator/` | Домен: `airavaluator.orleu.edu.kz:8502`
 
+**Актуальный индекс:** [`docs/README.md`](README.md). Справочник: `docs/reference/`, архитектура: `docs/architecture/`, деплой: `docs/operations/deployment.md`.  
+Ниже — сжатая база знаний; при расхождении с кодом приоритет у репозитория и структурированной документации.
+
 ---
 
 ## Содержание
@@ -39,11 +42,11 @@
                 │
                 └── 5 параллельных воркеров
                         │
-                        ├── downloader.py  → скачать файл (OneDrive / прямой URL)
-                        ├── converter.py   → LibreOffice → PDF
-                        ├── extractor.py   → pdfminer → текст (или DeepSeek-OCR)
+                        ├── downloader.py  → скачать файл (OneDrive / Google Docs / URL)
+                        ├── converter.py   → LibreOffice → docx/pdf где нужно
+                        ├── extractor.py   → текст: docx XML / PyMuPDF / Vision (Qwen3-VL)
                         ├── llm.py         → NITEC LLM оценка по рубрике
-                        └── → сохранить результат в PostgreSQL
+                        └── → сохранить результат в PostgreSQL (опц. delivery → Beles/webhook)
 ```
 
 Проект полностью независим от ApeRAG — собственный pipeline без внешних зависимостей от других сервисов Orleu.
@@ -60,8 +63,8 @@
 | База данных | PostgreSQL | :5432 (уже на сервере) |
 | WSGI сервер | Gunicorn | 3 воркера |
 | Конвертация документов | LibreOffice (headless) | уже установлен |
-| Извлечение текста из PDF | pdfminer.six | 20221105 |
-| OCR (сканированные PDF) | DeepSeek-OCR через NITEC | — |
+| Текст из PDF | PyMuPDF (`fitz`) | страница за страницей |
+| OCR (мало текста в PDF) | Qwen3-VL через NITEC (PNG base64) | не DeepSeek-OCR |
 | LLM оценка | NITEC LLM (llm.nitec.kz/v1) | openai/gpt-oss-120b |
 | Экспорт Excel | openpyxl | 3.1.x |
 | Определение языка | langdetect | 1.0.9 |
@@ -87,37 +90,28 @@
 │   ├── urls.py                   # корневые URL
 │   └── wsgi.py
 │
-├── evaluator/                    # основное Django приложение
-│   ├── models.py                 # EvaluationJob, Evaluation
-│   ├── views.py                  # dashboard, upload, results, export
-│   ├── tasks.py                  # Celery: process_file, process_job
-│   ├── forms.py                  # JobUploadForm
-│   ├── admin.py                  # Django Admin
-│   ├── urls.py                   # маршруты приложения
-│   └── templates/
-│       ├── base.html             # Bootstrap 5 layout + sidebar
-│       ├── login.html            # страница входа
-│       ├── dashboard.html        # прогресс + список Job'ов
-│       ├── results.html          # таблица с фильтрами + пагинация
-│       └── upload.html           # загрузка CSV/Excel
+├── apps/
+│   ├── batch/                    # EvaluationJob, Evaluation, UI, DRF api.py
+│   ├── evaluators/               # EvaluatorConfig, рубрики, staff UI
+│   ├── accounts/                 # CustomUser
+│   └── single/                   # один документ (форма)
 │
-├── pipeline/                     # логика обработки
-│   ├── __init__.py
-│   ├── downloader.py             # скачать файл по URL
-│   ├── converter.py              # LibreOffice → PDF
-│   ├── extractor.py              # PDF → text + OCR fallback
-│   ├── llm.py                    # NITEC LLM запрос + парсинг
-│   ├── prompt.py                 # шаблон промпта
-│   ├── rubric_loader.py          # загрузка рубрики (ru/kk)
-│   └── parser.py                 # парсинг пути к файлу
+├── pipeline/                     # async-логика (orchestrator, downloader, …)
+│   ├── orchestrator.py
+│   ├── downloader.py
+│   ├── converter.py
+│   ├── extractor.py
+│   ├── validator.py
+│   ├── llm.py
+│   ├── rubric_loader.py
+│   └── parser.py
 │
-├── rubric/
-│   ├── rubric_rus.md             # рубрика на русском (5 разделов, 25 критериев)
-│   └── rubric_kaz.md             # рубрика на казахском
+├── tasks/                        # Celery: evaluate.py, maintenance.py, delivery.py
+│
+├── rubrics/                      # rubric_rus.md, rubric_kaz.md (дефолт)
 │
 ├── deploy/
-│   ├── deploy.sh                 # скрипт первичного деплоя
-│   ├── orleu-batch-evaluator.service   # systemd: Django
+│   ├── orleu-batch-evaluator.service   # systemd: Gunicorn
 │   └── orleu-batch-celery.service      # systemd: Celery worker
 │
 └── tmp/                          # временные файлы (автоматически удаляются)
@@ -191,41 +185,19 @@ class Evaluation(models.Model):
 
 ## Pipeline обработки файлов
 
-Каждый файл проходит 5 этапов в Celery задаче `process_file`:
+Цепочка задаётся в `pipeline/orchestrator.py` (`run_pipeline`) и вызывается из Celery `tasks/evaluate.py` через `asyncio.run`.
 
-```
-1. download_file(url)
-   ├── Преобразовать OneDrive sharing URL → прямая ссылка (?download=1)
-   ├── GET запрос с User-Agent
-   ├── Определить расширение из Content-Disposition / URL / Content-Type
-   └── Сохранить во tmp/ с UUID именем
+Упрощённо:
 
-2. convert_to_pdf(path)
-   ├── Если уже .pdf → пропустить
-   ├── Поддержка: .doc, .docx, .odt, .rtf
-   └── subprocess: libreoffice --headless --convert-to pdf --outdir tmp/
+1. **Скачивание** — `downloader.download_file` (опц. Google Docs → export URL).
+2. **Конвертация** — `converter.convert_to_docx` (LibreOffice для `.doc` и т.д.).
+3. **Валидация** — `validator.check_truncated_zip`, `fix_broken_docx` при необходимости.
+4. **Текст** — `extractor.extract_text`: docx (XML/таблицы) → при малом объёме PyMuPDF → при необходимости Vision (Qwen3-VL, PNG base64 по страницам). Пороги: `MIN_TEXT_CHARS`, `VISION_*` из `.env` или `EvaluatorConfig`.
+5. **LLM** — `llm.evaluate_with_llm`; рубрика из файлов `rubrics/` или из модели `Rubric` при мультиконфиге.
 
-3. extract_with_ocr_fallback(pdf_path)
-   ├── pdfminer.six → извлечь текст
-   ├── Если текст >= 100 символов → использовать
-   └── Иначе → DeepSeek-OCR через NITEC API (base64 PDF)
+Подробно: **`docs/reference/pipeline.md`**.
 
-4. evaluate_document(text)
-   ├── langdetect → определить язык (kk или ru)
-   ├── Загрузить рубрику (rubric_kaz.md или rubric_rus.md)
-   ├── Сформировать промпт (rubric + student_work)
-   ├── Запрос к NITEC LLM (temperature=0.1, max_tokens=4096)
-   └── Парсинг JSON ответа (с fallback на regex поиск)
-
-5. Сохранить в БД
-   ├── Evaluation.scores = {"s1_c1": N, ...}
-   ├── Evaluation.total_score, level, feedback
-   ├── Evaluation.teacher_name, topic (из LLM)
-   ├── Evaluation.status = "done"
-   └── Удалить tmp файлы
-```
-
-**Обработка ошибок:** `max_retries=2`, `retry_delay=30s`. После исчерпания попыток — `status=failed`, текст ошибки сохраняется в `error`.
+**Пауза батча:** при `job.paused` задача `process_file` уходит в retry (см. `tasks/evaluate.py`).
 
 ---
 
@@ -233,30 +205,23 @@ class Evaluation(models.Model):
 
 ### `process_job(job_id)`
 
-Точка входа для батча. Вызывается из view после загрузки файла.
+Точка входа для батча: ставит в очередь `process_file` для каждой оценки. См. `tasks/evaluate.py`.
 
 ```python
-# Запуск
-from evaluator.tasks import process_job
+from tasks.evaluate import process_job
 process_job.delay(job.id)
-
-# Что делает:
-# 1. Job.status = 'running'
-# 2. Для каждого Evaluation(status='pending') → process_file.delay(e.id)
 ```
 
 ### `process_file(evaluation_id)`
 
-Полный pipeline для одного файла. Декоратор: `bind=True, max_retries=2, default_retry_delay=30`.
+Полный pipeline для одного файла. Декоратор: `bind=True`, большой `max_retries` для паузы батча.
 
-После завершения вызывает `_check_job_completion(job_id)` — если все файлы обработаны, Job переходит в `done`.
-
-**Запуск воркеров:**
+**Запуск воркеров (очереди как в `CELERY_TASK_ROUTES`):**
 ```bash
-celery -A config worker --concurrency=5 -l info
+celery -A config worker --concurrency=5 -Q evaluation,maintenance -l info
 ```
 
-**Параллелизм:** 5 воркеров. Ограничение обусловлено rate limit NITEC API. Можно менять через `NITEC_MAX_WORKERS` в `.env`.
+Семафоры LLM/скачиваний/Vision — `config/concurrency.py` и переменные `NITEC_MAX_WORKERS`, `MAX_CONCURRENT_DOWNLOADS`, `MAX_CONCURRENT_VISION`.
 
 ---
 
@@ -275,8 +240,8 @@ celery -A config worker --concurrency=5 -l info
 | `openai/gpt-oss-120b` | **Основная** — оценка планов уроков |
 | `deepseek-ai/DeepSeek-V3.2` | Альтернатива (лучше для рус/каз текстов) |
 | `moonshotai/Kimi-K2.5` | Альтернатива |
-| `deepseek-ai/DeepSeek-OCR` | OCR сканированных PDF |
-| `Qwen/Qwen3-VL-235B-A22B-Instruct` | Vision модель |
+| `deepseek-ai/DeepSeek-OCR` | Не использовать для текста (bbox, не содержимое) |
+| `Qwen/Qwen3-VL-235B-A22B-Instruct` | Vision OCR (страницы PDF → PNG → API) |
 | `BAAI/bge-m3` | Embedding |
 | `astanahub/alemllm` | Казахстанская LLM |
 
@@ -349,7 +314,7 @@ celery -A config worker --concurrency=5 -l info
 
 ## Рубрика оценивания
 
-Файлы хранятся локально: `/opt/orleu-batch-evaluator/rubric/`
+Файлы по умолчанию: каталог **`RUBRICS_DIR`** (в репозитории `rubrics/`, см. `rubric_rus.md` / `rubric_kaz.md`). В мультиконфиге возможны загрузки в БД (`evaluators.Rubric`).
 
 ### Структура (5 разделов × 5 критериев = 25 критериев)
 
@@ -391,70 +356,23 @@ def get_rubric(text: str) -> str:
 
 ## API и маршруты
 
-| URL | View | Описание |
-|-----|------|----------|
-| `GET /` | `dashboard` | Дашборд, список Job'ов, прогресс |
-| `GET/POST /upload/` | `upload` | Загрузка CSV/Excel и запуск батча |
-| `GET /results/` | `results` | Таблица результатов с фильтрами |
-| `GET /results/export/` | `export_excel` | Скачать Excel (с теми же фильтрами) |
-| `GET /api/job/<id>/progress/` | `job_progress_api` | JSON прогресс для AJAX |
-| `GET/POST /login/` | Django auth | Страница входа |
-| `GET /logout/` | Django auth | Выход |
-| `GET /admin/` | Django Admin | Управление пользователями |
+**Браузер:** `/batch/` (дашборд, upload, results, export), `/evaluators/…`, `/single/…`, `/accounts/login/`.
 
-### AJAX прогресс (Dashboard)
+**JSON API:** префикс `/api/` — см. **`docs/reference/api.md`**. Примеры: `POST /api/batch/upload/`, `GET /api/batch/<id>/`, `GET /api/evaluations/`, `GET /api/health/`, per-config `POST /api/ev/<slug>/evaluate/`.
 
-Dashboard опрашивает `/api/job/<id>/progress/` каждые 5 секунд, пока `status != 'done'`.
-
-Ответ:
-```json
-{
-  "id": 42,
-  "name": "ПКС 2025 Алматы",
-  "status": "running",
-  "total": 4000,
-  "processed": 1250,
-  "failed": 12,
-  "progress_percent": 32
-}
-```
+Отдельного `GET /api/job/<id>/progress/` в проекте **нет**; прогресс на дашборде — серверный рендер.
 
 ### Фильтры на странице Results
 
-Поддерживаемые GET-параметры: `city`, `trainer`, `group`, `status`, `job_id`, `page`.
-
-Те же параметры передаются в `/results/export/` для фильтрованного экспорта.
+GET-параметры и экспорт — как в `apps/batch/views.py` (см. `docs/reference/api.md`).
 
 ---
 
 ## Конфигурация (.env)
 
-```env
-DEBUG=False
-SECRET_KEY=your-long-random-secret-key
+Используется **`DATABASE_URL`**, **`DJANGO_SECRET_KEY`**, **`REDIS_URL`**, NITEC-переменные, **`RUBRICS_DIR`**, опционально **`EVALUATOR_API_KEY`**. Полный список: **`docs/reference/config-env.md`** и **`/.env.example`**.
 
-# PostgreSQL
-DB_NAME=orleu_batch_evaluator
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_HOST=localhost
-DB_PORT=5432
-
-# Redis
-REDIS_URL=redis://localhost:6379/1
-
-# NITEC LLM
-NITEC_API_KEY=sk-xxx
-NITEC_BASE_URL=https://llm.nitec.kz/v1
-NITEC_MODEL=openai/gpt-oss-120b
-NITEC_MAX_WORKERS=5
-
-# Пути
-TMP_DIR=/opt/orleu-batch-evaluator/tmp
-RUBRIC_DIR=/opt/orleu-batch-evaluator/rubric
-```
-
-**Смена модели LLM** — только правка `NITEC_MODEL` в `.env`, код не меняется.
+**Смена модели LLM** — `NITEC_MODEL` в `.env` (для режима без `EvaluatorConfig`); в мультиконфиге модель задаётся в `EvaluatorConfig`.
 
 ---
 
@@ -462,13 +380,7 @@ RUBRIC_DIR=/opt/orleu-batch-evaluator/rubric
 
 ### Первичный деплой
 
-```bash
-cd /opt/orleu-batch-evaluator
-chmod +x deploy/deploy.sh
-sudo bash deploy/deploy.sh
-```
-
-Скрипт выполняет: создание venv → pip install → создание БД → migrate → создание admin → collectstatic → установка systemd сервисов.
+Клонирование репозитория, venv, `pip install -r requirements.txt`, `migrate`, unit-файлы из **`deploy/`** — пошагово **`docs/operations/deployment.md`**.
 
 ### Ручной запуск (разработка)
 
@@ -480,7 +392,7 @@ source venv/bin/activate
 python manage.py runserver 0.0.0.0:8502
 
 # Terminal 2 — Celery
-celery -A config worker --concurrency=5 -l info
+celery -A config worker --concurrency=5 -Q evaluation,maintenance -l info
 ```
 
 ### Управление сервисами
@@ -566,7 +478,7 @@ file_path,file_url
 
 ## Экспорт результатов
 
-URL: `GET /results/export/?[фильтры]`
+URL: `GET /batch/results/export/` (см. `apps/batch/urls.py`).
 
 **Колонки Excel:**
 
@@ -586,18 +498,11 @@ URL: `GET /results/export/?[фильтры]`
 
 ### Счётчики processed/failed в EvaluationJob
 
-В текущей реализации счётчики обновляются через отдельные `SELECT + UPDATE` запросы в `tasks.py`, что создаёт race condition при параллельных воркерах. 
+Инкременты делаются через **`F()`** атомарно (см. `tasks/evaluate.py` и `docs/reference/database.md`).
 
-**Правильное решение:**
-```python
-# Вместо ручного инкремента использовать:
-from django.db.models import F
-EvaluationJob.objects.filter(id=job_id).update(processed=F('processed') + 1)
-```
+### Сканированные / «пустые» PDF
 
-### Сканированные PDF
-
-Если `pdfminer` возвращает < 100 символов — файл считается сканированным и отправляется в `DeepSeek-OCR`. OCR работает медленнее и дороже по токенам. Порог можно изменить в `extractor.py`: `MIN_TEXT_LENGTH = 100`.
+Если после PyMuPDF текста мало — при включённом Vision вызывается **Qwen3-VL** по страницам (дорого по токенам). Пороги: `MIN_TEXT_CHARS`, `VISION_MAX_PAGES`, `VISION_DPI`.
 
 ### Контекстное окно LLM
 
@@ -633,14 +538,14 @@ python manage.py shell
 
 # Проверить Job вручную
 python manage.py shell -c "
-from evaluator.models import EvaluationJob
+from apps.batch.models import EvaluationJob
 job = EvaluationJob.objects.last()
-print(job.name, job.status, job.progress_percent, '%')
+print(job.name, job.status, job.progress_percent)
 "
 
 # Запустить один файл вручную (без Celery)
 python manage.py shell -c "
-from evaluator.tasks import process_file
-process_file(evaluation_id=123)  # синхронно, без .delay()
+from tasks.evaluate import process_file
+process_file(123)  # или .delay(123) для очереди
 "
 ```

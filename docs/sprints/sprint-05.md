@@ -22,7 +22,7 @@ Browser UI для оценки одного документа (ранее — `
 - Добавлен `path("single/", include("apps.single.urls"))` в root URLconf
 - Добавлена ссылка "Один документ" в sidebar навигации
 
-### Tests (35 тестов, все прошли)
+### Tests (набор растёт; актуальное число: `pytest tests/ --collect-only`)
 
 **`tests/test_models.py`** — Django ORM (SQLite in-memory):
 - Создание EvaluationJob / Evaluation

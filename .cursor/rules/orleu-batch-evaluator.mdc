@@ -6,7 +6,7 @@ alwaysApply: true
 # Orleu Batch Evaluator — Контекст проекта
 
 Система массовой автономной оценки учебных планов педагогов (репозиторий: `ai-batch-evaluator`).
-**Документация:** `docs/` (overview, architecture, database, pipeline, api, config).
+**Документация:** индекс `docs/README.md`; справочник `docs/reference/`; архитектура `docs/architecture/`; операции `docs/operations/`.
 **Спринты:** `docs/sprints/README.md`, `docs/sprints/sprint-NN.md` — статус и следующие шаги.
 
 ## Стек
