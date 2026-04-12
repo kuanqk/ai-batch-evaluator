@@ -50,7 +50,7 @@ DATABASE_URL=postgresql://... python scripts/run_pipeline.py \
 ## Done (2026-04-05)
 
 - Добавлены модули `pipeline/` (`parser`, `downloader`, `converter`, `docx_utils`, `extractor`, `rubric_loader`, `llm`, `orchestrator`), точка входа `run_pipeline()`.
-- `prompt_template.py` — пользовательский промпт с ожидаемой схемой JSON (см. `docs/orleu-batch-evaluator-knowledge-base.md`).
+- `prompt_template.py` — пользовательский промпт с ожидаемой схемой JSON (см. `docs/reference/pipeline.md`; исторический обзор — `docs/archive/orleu-batch-evaluator-knowledge-base.md`).
 - `scripts/run_pipeline.py` — CLI: `--url`, опционально `--file-path`, `--extract-only`.
 - `config/concurrency.py` + вызов `init_concurrency()` в FastAPI lifespan и Celery worker.
 - `requirements.txt`: `openai`, `langdetect`, `PyMuPDF`; `Dockerfile`: `libreoffice-writer`, `libreoffice-calc`, `catdoc`.

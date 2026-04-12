@@ -40,9 +40,9 @@
 | Документ | Содержание |
 |----------|------------|
 | [plans/improvements.md](plans/improvements.md) | Долгосрочный план фич (мультиконфиг, pipeline) |
-| [sprints/README.md](sprints/README.md) | Спринты и статус |
-| [orleu-batch-evaluator-knowledge-base.md](orleu-batch-evaluator-knowledge-base.md) | Сжатая база знаний (исторический документ) |
+| [sprints/README.md](sprints/README.md) | Спринты и статус (**не архив** — живая история проекта) |
+| [archive/README.md](archive/README.md) | Редиректы и [архивная база знаний](archive/orleu-batch-evaluator-knowledge-base.md) |
 
-## Устаревшие пути (редирект)
+## Архив
 
-Короткие файлы в `docs/*.md` с меткой «перенесено» сохранены для старых ссылок; актуальное содержание — в папках выше.
+Перенесённые заглушки и длинный **knowledge base** — в **[archive/](archive/)** (см. [archive/README.md](archive/README.md)). Корневой файл [orleu-batch-evaluator-knowledge-base.md](orleu-batch-evaluator-knowledge-base.md) — короткий редирект.
